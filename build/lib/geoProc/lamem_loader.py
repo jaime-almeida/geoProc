@@ -81,6 +81,8 @@ class LaMEMLoader:
             - ts: timestep to process
             - model_zone: type of model output to open (internal or surface)
         """
+
+
         # Verify if the path is correct:
         if not os.path.isdir(model_dir):
             raise FileNotFoundError('No such model exists.')

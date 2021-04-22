@@ -89,14 +89,19 @@ def get_time(mdir, ts):
 
 class ModelProcessing:
 
-    def __init__(self, model_dir=None, loader='uw', **kwargs):
+    def __init__(self, model_dir=None, **kwargs):
 
         # Save it:
         self.performed_slices = []
         self.model_dir = model_dir
-        self.loader = loader
 
-        if loader == 'uw':
+        # Detect what loader to use - simply check if there's an h5 file in the folder:
+        if sum(['h5' in file_name for file_name in os.listdir(model_dir)]) != 0:
+            self.loader = 'uw'
+        else:
+            self.loader = 'lamem'
+
+        if self.loader == 'uw':
             temp = UwLoader(model_dir=model_dir, **kwargs)
             self.current_ts = temp.current_step
             self.output = temp.output
@@ -106,7 +111,7 @@ class ModelProcessing:
             self.scf = temp.scf
             self.model_name = temp.model_name
 
-        elif loader == 'lamem':
+        elif self.loader == 'lamem':
             temp = LaMEMLoader(model_dir=model_dir, **kwargs)
             self.output = temp.output
             # self.time_Ma = temp.time_Ma
@@ -388,23 +393,23 @@ class ModelProcessing:
 
 
 class SubductionModel(ModelProcessing):
-    def __init__(self, model_dir, loader='uw', horizontal_direction='x',
+    def __init__(self, model_dir, horizontal_direction='x',
                  vertical_direction='y', surface_value=0, **kwargs):
         # Initiate the uwobject
-        super().__init__(model_dir=model_dir, loader=loader, **kwargs)
+        super().__init__(model_dir=model_dir, **kwargs)
 
         self.horizontal_direction = horizontal_direction
         self.vertical_direction = vertical_direction
 
         # Correct the depth scale from uw models:
-        if loader == 'uw':
+        if self.loader == 'uw':
             self.correct_depth(vertical_direction=vertical_direction)
 
         # Find the closest surface value possible:
         self.surface_value = get_closest(self.output[vertical_direction], surface_value)
 
         # Testing if this works
-        if loader == 'uw':
+        if self.loader == 'uw':
             # Detect the trench position
             self.trench = self.find_trench()
 
@@ -604,44 +609,44 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
     # Preparar os dois loaders:
-    uw_model = SubductionModel(model_dir='F:\\3D_AgeTest\\model_results\\3D_block_S', loader='uw',
-                               scf=1e22, ts=300, get_all=True, surface_value=0)
+    uw_model = SubductionModel(model_dir='F:\\NoPlateauSubduction\\model_results\\10OP_30DP',
+                               scf=1e22, ts=300)
 
-    lm_model = SubductionModel(model_dir='Z:\\PlateauCollision3D_LM\\plateau_size\\_M_D70_O70',
-                               loader='lamem',
-                               vtk_name='Caribbean_v16', ts=200)
-
-    # FLip the x array
-    lm_model.output.x *= -1
-
-    # Set slice at the surface:
-    uw_model.set_slice(direction='z', value=0, find_closest=True)
-    lm_model.set_slice(direction='y', value=0, find_closest=True)
-
-    # Get the trenches
-    uw_trench = uw_model.find_trench()
-    lm_trench = lm_model.find_trench(filter=False)
-
-    # Interpolate
-    x_uw, y_uw, mat_uw = uw_model.reinterpolate_window(variable=uw_model.output.eta, hdir='x', vdir='y')
-    x_lm, y_lm, mat_lm = lm_model.reinterpolate_window(variable=lm_model.output.eta, hdir='x', vdir='z')
-
-    # Testar se funcionam os dois:
-    fig, ax = plt.subplots(nrows=2, figsize=[6, 8])
-
-    # Start plotting
-    uw_plot = ax[1].pcolormesh(x_uw / 1e3, y_uw / 1e3, mat_uw, cmap='coolwarm', shading='auto')
-    ax[1].set_xlabel('x')
-    ax[1].set_ylabel('y')
-    ax[1].set_title('UwLoader')
-    ax[1].axvline(uw_trench / 1e3)
-
-    lm_plot = ax[0].pcolormesh(x_lm, y_lm, mat_lm, cmap='coolwarm', shading='auto')
-    ax[0].set_xlabel('x')
-    ax[0].set_ylabel('y')
-    ax[0].set_title('LaMEMLoader')
-    ax[0].axvline(lm_trench)
-
-    plt.colorbar(lm_plot, ax=ax[0])
-    plt.colorbar(uw_plot, ax=ax[1])
-    fig.tight_layout()
+    # lm_model = SubductionModel(model_dir='Z:\\PlateauCollision3D_LM\\plateau_size\\_M_D70_O70',
+    #                            loader='lamem',
+    #                            vtk_name='Caribbean_v16', ts=200)
+    #
+    # # FLip the x array
+    # lm_model.output.x *= -1
+    #
+    # # Set slice at the surface:
+    # uw_model.set_slice(direction='z', value=0, find_closest=True)
+    # lm_model.set_slice(direction='y', value=0, find_closest=True)
+    #
+    # # Get the trenches
+    # uw_trench = uw_model.find_trench()
+    # lm_trench = lm_model.find_trench(filter=False)
+    #
+    # # Interpolate
+    # x_uw, y_uw, mat_uw = uw_model.reinterpolate_window(variable=uw_model.output.eta, hdir='x', vdir='y')
+    # x_lm, y_lm, mat_lm = lm_model.reinterpolate_window(variable=lm_model.output.eta, hdir='x', vdir='z')
+    #
+    # # Testar se funcionam os dois:
+    # fig, ax = plt.subplots(nrows=2, figsize=[6, 8])
+    #
+    # # Start plotting
+    # uw_plot = ax[1].pcolormesh(x_uw / 1e3, y_uw / 1e3, mat_uw, cmap='coolwarm', shading='auto')
+    # ax[1].set_xlabel('x')
+    # ax[1].set_ylabel('y')
+    # ax[1].set_title('UwLoader')
+    # ax[1].axvline(uw_trench / 1e3)
+    #
+    # lm_plot = ax[0].pcolormesh(x_lm, y_lm, mat_lm, cmap='coolwarm', shading='auto')
+    # ax[0].set_xlabel('x')
+    # ax[0].set_ylabel('y')
+    # ax[0].set_title('LaMEMLoader')
+    # ax[0].axvline(lm_trench)
+    #
+    # plt.colorbar(lm_plot, ax=ax[0])
+    # plt.colorbar(uw_plot, ax=ax[1])
+    # fig.tight_layout()
