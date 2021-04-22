@@ -1,4 +1,4 @@
-from geoProc.uw_loader import *
+from geoProc.loading.uw_loader import *
 from geoProc.lamem_loader import LaMEMLoader
 import numpy as np
 import pandas as pd

@@ -1,5 +1,5 @@
-from geoProc.uw_loader import *
-from geoProc.lamem_loader import LaMEMLoader
+from geoProc.loading.uw_loader import *
+from geoProc.loading import uw_loader, lamem_loader
 import numpy as np
 import pandas as pd
 from scipy.signal import find_peaks
@@ -644,4 +644,3 @@ if __name__ == '__main__':
     plt.colorbar(lm_plot, ax=ax[0])
     plt.colorbar(uw_plot, ax=ax[1])
     fig.tight_layout()
-
