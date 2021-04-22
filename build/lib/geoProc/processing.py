@@ -1,5 +1,6 @@
 from geoProc.loading.uw_loader import *
-from geoProc.loading import uw_loader, lamem_loader
+from geoProc.loading.lamem_loader import LaMEMLoader
+
 import numpy as np
 import pandas as pd
 from scipy.signal import find_peaks
