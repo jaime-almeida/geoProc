@@ -72,7 +72,7 @@ def get_all_ts_folders(model_dir):
 # %%
 class LaMEMLoader:
 
-    def __init__(self, model_dir, vtk_name, ts=0, load_single=False, model_zone='internal'):
+    def __init__(self, model_dir, ts=None, model_zone='internal'):
         """
         Loading function to generate the input for LaMEM model processing.
         Input arguments:
@@ -82,7 +82,6 @@ class LaMEMLoader:
             - model_zone: type of model output to open (internal or surface)
         """
 
-
         # Verify if the path is correct:
         if not os.path.isdir(model_dir):
             raise FileNotFoundError('No such model exists.')
@@ -91,6 +90,12 @@ class LaMEMLoader:
         self.model_dir = model_dir
         self.current_ts = ts
         self.dim = 3
+
+        # Check how many timesteps to load
+        if ts:
+            load_single = True
+        else:
+            load_single = False
 
         # Get the timestep folder
         # folder_name, time = get_ts_folder(self.model_dir, ts)
@@ -122,8 +127,13 @@ class LaMEMLoader:
 
             print('Now reading timestep {} for model {}'.format(timestep, self.model_dir.split('\\')[-1]))
 
+            # Get the vtk_name from the folder:
+            file_list = os.listdir('{}\\{}'.format(model_dir, folder_name))
+            check_files = [vtk_ext in files for files in file_list]
+            vtk_name = file_list[check_files == 1]
+
             # Create the filename to read
-            filename = '{}\\{}\\{}.{}'.format(model_dir, folder_name, vtk_name, vtk_ext)
+            filename = '{}\\{}\\{}'.format(model_dir, folder_name, vtk_name)
 
             # Start the reader:
             reader = vtkXMLPRectilinearGridReader()
@@ -277,6 +287,6 @@ class LaMEMLoader:
 #
 if __name__ == '__main__':
     test = LaMEMLoader(model_dir='Z:\\PlateauCollision3D_LM\\model_results\\plateau_size\\_L_D70_O70\\',
-                       vtk_name='Caribbean_v16',
-                       ts=400,
+                       ts=400
                        )
+    test.output
