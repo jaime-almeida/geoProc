@@ -142,7 +142,7 @@ class ModelProcessing:
             # Get the current time and descale it
             self.time_Ma = np.round(get_time(self.model_dir, self.current_step) * self.scf / (365 * 24 * 3600) / 1e6, 3)
 
-    def reinterpolate_window(self, variable, hdir='x', vdir='y', n_elements=int(1e3)):
+    def interpolate_window(self, variable, hdir='x', vdir='y', n_elements=int(1e3)):
         """
         Reinterpolate the dataframes into 2D numpy arrays for easier plotting
 
