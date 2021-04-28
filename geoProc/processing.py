@@ -435,15 +435,15 @@ class SubductionModel(ModelProcessing):
         surface_index = vdir[vdir == self.surface_value].index
 
         # Get velocity fields
-        condition = False
-        while not condition:
-            try:
-                # If this is being called by an external object, try and detect the velocities
-                vx = self.output.vx.iloc[surface_index].to_numpy()
-                condition = True
-            except AttributeError:
-                # If this is the first loading of the SubductionModel object or the velocities aren't present
-                self.get_velocity()
+        # condition = False
+        #         # while not condition:
+        #         #     try:
+        # If this is being called by an external object, try and detect the velocities
+        vx = self.output.vx.iloc[surface_index].to_numpy()
+        #     condition = True
+        # except AttributeError:
+        #     # If this is the first loading of the SubductionModel object or the velocities aren't present
+        #     self.get_velocity()
 
         # Extract just the vertical velocity
         # vy = self.output.vy.iloc[surface_index].to_numpy()
@@ -609,7 +609,7 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
     # Preparar os dois loaders:
-    uw_model = SubductionModel(model_dir='F:\\NoPlateauSubduction\\model_results\\10OP_30DP',
+    uw_model = ModelProcessing(model_dir='F:\\NoPlateauSubduction\\model_results\\10OP_30DP',
                                scf=1e22, ts=300)
 
     # lm_model = SubductionModel(model_dir='Z:\\PlateauCollision3D_LM\\plateau_size\\_M_D70_O70',

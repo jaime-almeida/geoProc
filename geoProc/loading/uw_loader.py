@@ -114,7 +114,7 @@ def get_nproc(mdir):
 # %%
 class UwLoader:
 
-    def __init__(self, model_dir, get_all=True, ts=0, scf=1e22):
+    def __init__(self, model_dir, ts=0, scf=1e22):
         if model_dir[-1] != '/':
             self.model_dir = model_dir + '/'
         else:
@@ -151,8 +151,8 @@ class UwLoader:
 
         self._get_mesh()
 
-        if get_all:
-            self.get_all()
+        # if get_all:
+        self.get_all()
 
         self.starting_output = self.output  # for slices
 
