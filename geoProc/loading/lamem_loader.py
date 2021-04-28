@@ -72,7 +72,7 @@ def get_all_ts_folders(model_dir):
 # %%
 class LaMEMLoader:
 
-    def __init__(self, model_dir, ts=None, model_zone='internal'):
+    def __init__(self, model_dir, ts=0, model_zone='internal'):
         """
         Loading function to generate the input for LaMEM model processing.
         Input arguments:
