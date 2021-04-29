@@ -146,7 +146,7 @@ class LaMEMLoader:
             # print('Compiling data...')
             reader.Update()
 
-            self.__data = reader.GetOutput()
+            self._data = reader.GetOutput()
 
             # Initiate a boundary coordinate
             self.boundary = {}
@@ -200,7 +200,7 @@ class LaMEMLoader:
 
     def _get_velocity(self):
         # Get the velocity from the data files:
-        velocity = v2n.vtk_to_numpy(self.__data.GetPointData().GetArray('velocity [cm/yr]'))
+        velocity = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('velocity [cm/yr]'))
 
         # in 3D:
         velocity = pd.DataFrame(data=velocity, columns=['vx', 'vy', 'vz'])
@@ -210,13 +210,13 @@ class LaMEMLoader:
 
     def _get_mesh(self):
         # Prepare to receive the mesh:
-        x = np.zeros(self.__data.GetNumberOfPoints())
-        y = np.zeros(self.__data.GetNumberOfPoints())
-        z = np.zeros(self.__data.GetNumberOfPoints())
+        x = np.zeros(self._data.GetNumberOfPoints())
+        y = np.zeros(self._data.GetNumberOfPoints())
+        z = np.zeros(self._data.GetNumberOfPoints())
 
         # Build the mesh:
-        for i in range(self.__data.GetNumberOfPoints()):
-            x[i], y[i], z[i] = self.__data.GetPoint(i)
+        for i in range(self._data.GetNumberOfPoints()):
+            x[i], y[i], z[i] = self._data.GetPoint(i)
 
         # Create the mesh:
         mesh_info = np.column_stack([x, y, z])
@@ -234,7 +234,7 @@ class LaMEMLoader:
 
     def _get_phase(self):
         # Get the phase from the data files:
-        phase = v2n.vtk_to_numpy(self.__data.GetPointData().GetArray('phase [ ]'))
+        phase = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('phase [ ]'))
 
         # Save the phase dataframe as 'mat' to keep it working with uw scripts
         phase = pd.DataFrame(data=phase, columns=['mat'])
@@ -244,7 +244,7 @@ class LaMEMLoader:
 
     def _get_viscosity(self):
         # Get the phase from the data files:
-        eta = v2n.vtk_to_numpy(self.__data.GetPointData().GetArray('visc_total [Pa*s]'))
+        eta = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('visc_total [Pa*s]'))
 
         # Save the phase dataframe as 'mat' to keep it working with uw scripts
         eta = pd.DataFrame(data=eta, columns=['eta'])
@@ -254,7 +254,7 @@ class LaMEMLoader:
 
     def _get_pressure(self):
         # Get the phase from the data files:
-        pressure = v2n.vtk_to_numpy(self.__data.GetPointData().GetArray('pressure [MPa]'))
+        pressure = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('pressure [MPa]'))
 
         # Save the phase dataframe as 'mat' to keep it working with uw scripts
         pressure = pd.DataFrame(data=pressure, columns=['pressure_MPa'])
@@ -265,7 +265,7 @@ class LaMEMLoader:
     def _get_strain_rate(self):
         # Order is: xx xy xz yx yy yz zx zy zz
         # Get the phase from the data files:
-        strain_rate = v2n.vtk_to_numpy(self.__data.GetPointData().GetArray('strain_rate [1/s]'))
+        strain_rate = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('strain_rate [1/s]'))
 
         # Save the phase dataframe as 'mat' to keep it working with uw scripts
         strain_rate = pd.DataFrame(data=strain_rate,
@@ -276,7 +276,7 @@ class LaMEMLoader:
 
     def _get_temperature(self):
         # Get the phase from the data files:
-        temperature = v2n.vtk_to_numpy(self.__data.GetPointData().GetArray('temperature [C]'))
+        temperature = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('temperature [C]'))
 
         # Save the phase dataframe as 'mat' to keep it working with uw scripts
         temperature = pd.DataFrame(data=temperature, columns=['temp_C'])
@@ -296,7 +296,7 @@ class LaMEMLoader:
     def _get_combined_id_values(self):
         # For each item on the list, get the value and append to the output frame:
         for combination_name in self.combination_list:
-            data = v2n.vtk_to_numpy(self.__data.GetPointData().GetArray('{} [ ]'.format(combination_name)))
+            data = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('{} [ ]'.format(combination_name)))
 
             # Save this in the list:
             df = pd.DataFrame(data=data, columns=combination_name)
@@ -306,7 +306,5 @@ class LaMEMLoader:
 
 
 if __name__ == '__main__':
-    test = LaMEMLoader(model_dir='Z:\\PlateauCollision3D_LM\\model_results\\plateau_size\\_L_D70_O70\\',
-                       ts=400
-                       )
-    test.output
+    test = LaMEMLoader(model_dir='Z:\\PlateauCollision3D_LM\\model_results\\plateau_size\\_M_D70_O70', ts=400,
+                       combined_id_names=['_pacific', '_atlantic', '_caribbean_LIP', '_gaa'])
