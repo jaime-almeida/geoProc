@@ -72,7 +72,7 @@ def get_all_ts_folders(model_dir):
 # %%
 class LaMEMLoader:
 
-    def __init__(self, model_dir, ts=0, model_zone='internal'):
+    def __init__(self, model_dir, ts=0, model_zone='internal', combined_id_names: list = None):
         """
         Loading function to generate the input for LaMEM model processing.
         Input arguments:
@@ -90,6 +90,8 @@ class LaMEMLoader:
         self.model_dir = model_dir
         self.current_ts = ts
         self.dim = 3
+        if combined_id_names:
+            self.combination_list = combined_id_names
 
         # Check how many timesteps to load
         if ts:
@@ -158,6 +160,10 @@ class LaMEMLoader:
 
             # Get the variables
             self.get_all()
+
+            # Get the combined ids if needed:
+            if combined_id_names:
+                self._get_combined_id_values()
 
             self.complete_output[timestep] = self.output.copy()
             self.time_stamps[timestep] = time
@@ -283,8 +289,22 @@ class LaMEMLoader:
     def complete_output(self):
         return self._complete_output
 
+    ##################################################
+    #              GET THE COMBINED NAMES            #
+    ##################################################
 
-#
+    def _get_combined_id_values(self):
+        # For each item on the list, get the value and append to the output frame:
+        for combination_name in self.combination_list:
+            data = v2n.vtk_to_numpy(self.__data.GetPointData().GetArray('{} [ ]'.format(combination_name)))
+
+            # Save this in the list:
+            df = pd.DataFrame(data=data, columns=combination_name)
+
+            # Merge with the current output dataframe
+            self.output = self.output.merge(df, left_index=True, right_index=True)
+
+
 if __name__ == '__main__':
     test = LaMEMLoader(model_dir='Z:\\PlateauCollision3D_LM\\model_results\\plateau_size\\_L_D70_O70\\',
                        ts=400
