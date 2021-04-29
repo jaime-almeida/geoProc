@@ -296,10 +296,11 @@ class LaMEMLoader:
     def _get_combined_id_values(self):
         # For each item on the list, get the value and append to the output frame:
         for combination_name in self.combination_list:
+
             data = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('{} [ ]'.format(combination_name)))
 
             # Save this in the list:
-            df = pd.DataFrame(data=data, columns=combination_name)
+            df = pd.DataFrame(data=data, columns=[combination_name])
 
             # Merge with the current output dataframe
             self.output = self.output.merge(df, left_index=True, right_index=True)
