@@ -103,7 +103,7 @@ class ModelProcessing:
 
         if self.loader == 'uw':
             temp = UwLoader(model_dir=model_dir, **kwargs)
-            self.current_ts = temp.current_step
+            self.current_step = temp.current_step
             self.output = temp.output
             self.time_Ma = temp.time_Ma
             self.dim = temp.dim
@@ -121,7 +121,7 @@ class ModelProcessing:
 
             if temp.current_ts:
                 # if it came from a load_single stage
-                self.current_ts = temp.current_ts
+                self.current_step = temp.current_ts
 
         # Get rid of this huge thing
         del temp
@@ -135,7 +135,7 @@ class ModelProcessing:
             # Reinstanciate the object with a new timestep:
             step = str(step).zfill(5)
             self.output = self._complete_output[step].copy()
-            self.current_ts = step
+            self.current_step = step
             self.time_Ma = self.time_stamps[step]
 
         else:
@@ -282,7 +282,7 @@ class ModelProcessing:
         # try:
         #     self.output = self._starting_output.copy()
         # except:
-        self.set_current_ts(self.current_ts)
+        self.set_current_ts(self.current_step)
 
     def set_slice(self, direction, value=0, n_slices=None, find_closest=True, save=False):
         """
