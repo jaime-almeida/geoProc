@@ -1,3 +1,5 @@
+import statsmodels.tsa.stattools
+
 from geoProc.loading.uw_loader import *
 from geoProc.loading.lamem_loader import LaMEMLoader
 
@@ -103,7 +105,7 @@ class ModelProcessing:
 
         if self.loader == 'uw':
             temp = UwLoader(model_dir=model_dir, **kwargs)
-            self.current_ts = temp.current_step
+            self.current_step = temp.current_step
             self.output = temp.output
             self.time_Ma = temp.time_Ma
             self.dim = temp.dim
@@ -121,7 +123,7 @@ class ModelProcessing:
 
             if temp.current_ts:
                 # if it came from a load_single stage
-                self.current_ts = temp.current_ts
+                self.current_step = temp.current_ts
 
         # Get rid of this huge thing
         del temp
@@ -135,14 +137,15 @@ class ModelProcessing:
             # Reinstanciate the object with a new timestep:
             step = str(step).zfill(5)
             self.output = self._complete_output[step].copy()
-            self.current_ts = step
+            self.current_step = step
             self.time_Ma = self.time_stamps[step]
 
         else:
             # Get the current time and descale it
             self.time_Ma = np.round(get_time(self.model_dir, self.current_step) * self.scf / (365 * 24 * 3600) / 1e6, 3)
+            self.output = self._starting_output
 
-    def interpolate_window(self, variable, hdir='x', vdir='y', n_elements=int(1e3)):
+    def interpolate_window(self, variable, hdir='x', vdir='y', n_elements=int(1e3)) -> object:
         """
         Reinterpolate the dataframes into 2D numpy arrays for easier plotting
 
@@ -282,9 +285,9 @@ class ModelProcessing:
         # try:
         #     self.output = self._starting_output.copy()
         # except:
-        self.set_current_ts(self.current_ts)
+        self.set_current_ts(self.current_step)
 
-    def set_slice(self, direction, value=0, n_slices=None, find_closest=True, save=False):
+    def set_slice(self, direction, value=0., n_slices=None, find_closest=True, save=False):
         """
         Creates a slice according to the user specified parameters.
         """
@@ -478,8 +481,10 @@ class SubductionModel(ModelProcessing):
 
     def get_polarity(self, op_material=4, plate_thickness=100., horizontal_plane='xz', trench_direction='z',
                      get_depth=False):
+
+
         """
-        Function for finding the overriding plate at a critical depth. This depth is 25% deeper than the expected
+        Function for finding the overriding plate at a critical depth. This depth is 25% deeper than the maximum plate
         thickness.
 
          Parameters:
@@ -503,103 +508,133 @@ class SubductionModel(ModelProcessing):
             model.get_mesh()
             model.get_material()
             model.get_polarity()
-            :param plate_thickness:
         """
-        # Catch a few errors:
-        if type(horizontal_plane) != str:
-            raise TypeError('Plane must be a string!')
-
-        if len(horizontal_plane) != 2:
-            raise ValueError('Plane can only contain two letters!')
-
-        if len(trench_direction) != 1:
-            raise ValueError('Trench direction is a single letter!')
-
-        # ====================================== CHECK VALIDITY ======================================
-
-        # Ensure the strings are correctly formatted.
-        horizontal_plane = "".join(sorted(horizontal_plane.lower()))  # Correctly sorted and in lower case.
-        trench_direction = trench_direction.lower()
-
-        # Check if the plane is valid:
-        valid_planes = ['xy', 'yz', 'xz']
-        check = np.sum([sorted(horizontal_plane) == sorted(valid) for valid in valid_planes])
-
-        if check == 0:
-            raise ValueError('Plane is invalid. Please try a combination of ''x'', ''y'' and ''z''.')
-
-        # Check the plane direction:
-        slice_direction = 'xyz'
-
-        for char in horizontal_plane:
-            slice_direction = slice_direction.replace(char, '')
-
-        # Check if the direction of the trench is valid:
-        valid_direction = ['x', 'y', 'z']
-        check = np.sum([trench_direction == valid for valid in valid_direction])
-        #
-        # # Get the vertical direction:
-        # directions_in_plane = [letter for letter in horizontal_plane]
-        # vertical_direction = [letter for letter in valid_direction if letter not in directions_in_plane] # Whatever
-        # # is not on the plane
-
-        if check == 0:
-            raise ValueError('Trench is invalid. Please try ''x'', ''y'' or ''z''.')
-
-        # ================================ DETECT THE POLARITY ========================================
-
-        # Remove any slices:
-        self.remove_slices()
-
         # Set the critical depth:
         if self.loader == 'uw':
             critical_depth = 1.25 * plate_thickness * 1e3
-            # Create a slice at that depth:
-            self.set_slice(slice_direction, value=self.output[slice_direction].max() - critical_depth,
-                           find_closest=True)
 
         else:
             critical_depth = -1.25 * plate_thickness
-            # Create a slice at that depth:
-            self.set_slice(slice_direction, value=critical_depth,
-                           find_closest=True)
 
-        # Create a database just for the next operations, saves on memory and code:
-        reversed_index = self.output.mat[self.output.mat.round() == op_material].index.to_numpy()
+        # ===================== POLARITY DETECTION IN 2D ===========================
+        if self.dim == 2:
+            # raise Exception('Not implemented in 2D yet, check back later!')
 
-        # Detect along trench direction where it is reversed:
-        trench_dir_reverse = self.output[trench_direction].loc[reversed_index].unique()
+            # Set the critical depth:
+            if self.loader == 'uw':
+                # Create a slice at that critical depth:
+                self.set_slice('y', value=self.output.y.max() - critical_depth,
+                               find_closest=True)
+            else:
+                # Create a slice at that critical depth:
+                self.set_slice('z', value=critical_depth, find_closest=True)
 
-        # Remove any slices:
-        self.remove_slices()
+            # Copy and reset the output
+            output_check = self.output.copy()
+            self.remove_slices()
 
-        # Create a zeros array, each zero will represent the normal polarity
-        polarity = pd.DataFrame(data=np.array([self.output[trench_direction].to_numpy(),
-                                               np.zeros(self.output.x.shape)]).T,
-                                columns=(trench_direction, 'state'))
+            # Check if there's overriding plate material at this depth:
+            output_check = output_check.mat.to_numpy(dtype=int)
 
-        # Check all locations where trench direction reversed is found:
-        _, _, reversed_index = np.intersect1d(trench_dir_reverse,
-                                              self.output[trench_direction].to_numpy(),
-                                              return_indices=True)
+            if op_material in output_check:
+                self.output['polarity'] = np.ones(self.output.x.shape)
+            else:
+                self.output['polarity'] = np.zeros(self.output.x.shape)
 
-        # This only adds a zero to a single value of that trench_direction value:
-        polarity.loc[reversed_index, 'state'] = 1
+        # ===================== POLARITY DETECTION IN 3D ===========================
+        else:
+            # Catch a few errors:
+            if type(horizontal_plane) != str:
+                raise TypeError('Plane must be a string!')
 
-        # Copy those values for all trench_direction values:
-        for td in trench_dir_reverse:
-            polarity.state[polarity[trench_direction] == td] = 1
+            if len(horizontal_plane) != 2:
+                raise ValueError('Plane can only contain two letters!')
 
-        # Add polarity to all dataframes now:
-        self.output['polarity'] = polarity.state.copy()
+            if len(trench_direction) != 1:
+                raise ValueError('Trench direction is a single letter!')
 
-        # Check slices that were made before:
-        needed_slices = self.performed_slices.copy()
+            # ====================================== CHECK VALIDITY ======================================
 
-        # Remake the ones deleted:
-        for slices in needed_slices:
-            # print(f'Making slice: {slices}')
-            self.set_slice(**slices)
+            # Ensure the strings are correctly formatted.
+            horizontal_plane = "".join(sorted(horizontal_plane.lower()))  # Correctly sorted and in lower case.
+            trench_direction = trench_direction.lower()
+
+            # Check if the plane is valid:
+            valid_planes = ['xy', 'yz', 'xz']
+            check = np.sum([sorted(horizontal_plane) == sorted(valid) for valid in valid_planes])
+
+            if check == 0:
+                raise ValueError('Plane is invalid. Please try a combination of ''x'', ''y'' and ''z''.')
+
+            # Check the plane direction:
+            slice_direction = 'xyz'
+
+            for char in horizontal_plane:
+                slice_direction = slice_direction.replace(char, '')
+
+            # Check if the direction of the trench is valid:
+            valid_direction = ['x', 'y', 'z']
+            check = np.sum([trench_direction == valid for valid in valid_direction])
+            #
+            # # Get the vertical direction:
+            # directions_in_plane = [letter for letter in horizontal_plane]
+            # vertical_direction = [letter for letter in valid_direction if letter not in directions_in_plane] # Whatever
+            # # is not on the plane
+
+            if check == 0:
+                raise ValueError('Trench is invalid. Please try ''x'', ''y'' or ''z''.')
+
+            # ================================ DETECT THE POLARITY ========================================
+
+            # Remove any slices:
+            self.remove_slices()
+
+            # Set the critical depth:
+            if self.loader == 'uw':
+                # Create a slice at that critical depth:
+                self.set_slice(slice_direction, value=self.output[slice_direction].max() - critical_depth,
+                               find_closest=True)
+
+            else:
+                # Create a slice at that critical depth:
+                self.set_slice(slice_direction, value=critical_depth, find_closest=True)
+
+            # Create a database just for the next operations, saves on memory and code:
+            reversed_index = self.output.mat[self.output.mat.round() == op_material].index.to_numpy()
+
+            # Detect along trench direction where it is reversed:
+            trench_dir_reverse = self.output[trench_direction].loc[reversed_index].unique()
+
+            # Remove any slices:
+            self.remove_slices()
+
+            # Create a zeros array, each zero will represent the normal polarity
+            polarity = pd.DataFrame(data=np.array([self.output[trench_direction].to_numpy(),
+                                                   np.zeros(self.output.x.shape)]).T,
+                                    columns=(trench_direction, 'state'))
+
+            # Check all locations where trench direction reversed is found:
+            _, _, reversed_index = np.intersect1d(trench_dir_reverse,
+                                                  self.output[trench_direction].to_numpy(),
+                                                  return_indices=True)
+
+            # This only adds a zero to a single value of that trench_direction value:
+            polarity.loc[reversed_index, 'state'] = 1
+
+            # Copy those values for all trench_direction values:
+            for td in trench_dir_reverse:
+                polarity.state[polarity[trench_direction] == td] = 1
+
+            # Add polarity to all dataframes now:
+            self.output['polarity'] = polarity.state.copy()
+
+            # Check slices that were made before:
+            needed_slices = self.performed_slices.copy()
+
+            # Remake the ones deleted:
+            for slices in needed_slices:
+                # print(f'Making slice: {slices}')
+                self.set_slice(**slices)
 
         if get_depth:
             return critical_depth
@@ -607,46 +642,12 @@ class SubductionModel(ModelProcessing):
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    for ts in np.arange(0, 3200, 200):
+        # Preparar os dois loaders:
+        uw_model = SubductionModel(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
+                                   scf=1e22, ts=ts)
 
-    # Preparar os dois loaders:
-    uw_model = ModelProcessing(model_dir='F:\\NoPlateauSubduction\\model_results\\10OP_30DP',
-                               scf=1e22, ts=300)
-
-    # lm_model = SubductionModel(model_dir='Z:\\PlateauCollision3D_LM\\plateau_size\\_M_D70_O70',
-    #                            loader='lamem',
-    #                            vtk_name='Caribbean_v16', ts=200)
-    #
-    # # FLip the x array
-    # lm_model.output.x *= -1
-    #
-    # # Set slice at the surface:
-    # uw_model.set_slice(direction='z', value=0, find_closest=True)
-    # lm_model.set_slice(direction='y', value=0, find_closest=True)
-    #
-    # # Get the trenches
-    # uw_trench = uw_model.find_trench()
-    # lm_trench = lm_model.find_trench(filter=False)
-    #
-    # # Interpolate
-    # x_uw, y_uw, mat_uw = uw_model.reinterpolate_window(variable=uw_model.output.eta, hdir='x', vdir='y')
-    # x_lm, y_lm, mat_lm = lm_model.reinterpolate_window(variable=lm_model.output.eta, hdir='x', vdir='z')
-    #
-    # # Testar se funcionam os dois:
-    # fig, ax = plt.subplots(nrows=2, figsize=[6, 8])
-    #
-    # # Start plotting
-    # uw_plot = ax[1].pcolormesh(x_uw / 1e3, y_uw / 1e3, mat_uw, cmap='coolwarm', shading='auto')
-    # ax[1].set_xlabel('x')
-    # ax[1].set_ylabel('y')
-    # ax[1].set_title('UwLoader')
-    # ax[1].axvline(uw_trench / 1e3)
-    #
-    # lm_plot = ax[0].pcolormesh(x_lm, y_lm, mat_lm, cmap='coolwarm', shading='auto')
-    # ax[0].set_xlabel('x')
-    # ax[0].set_ylabel('y')
-    # ax[0].set_title('LaMEMLoader')
-    # ax[0].axvline(lm_trench)
-    #
-    # plt.colorbar(lm_plot, ax=ax[0])
-    # plt.colorbar(uw_plot, ax=ax[1])
-    # fig.tight_layout()
+        D = uw_model.get_polarity(op_material=5, get_depth=True)
+        print('TS: {}\nPol: {}\nDepth: {}'.format(ts, uw_model.output.polarity.unique(), D))
+        if 1 in uw_model.output.polarity.unique():
+            break
