@@ -479,9 +479,8 @@ class SubductionModel(ModelProcessing):
         # return trench_id
         # elif self.ndims == 3:
 
-    def get_polarity(self, dp_material=4, plate_thickness=100., horizontal_plane='xz', trench_direction='z',
+    def get_polarity(self, dp_mantle=6, op_mantle=4, plate_thickness=100., horizontal_plane='xz', trench_direction='z',
                      get_depth=False):
-
 
         """
         Function for finding the overriding plate at a critical depth. This depth is 25% deeper than the maximum plate
@@ -489,8 +488,9 @@ class SubductionModel(ModelProcessing):
 
          Parameters:
             > uw_object: an object created with the uw_model script, loaded with timestep, mesh and material.
-            > op_material: the ID or range of IDS for the overriding plate crust.
+            > op_mantle: the ID or range of IDS for the overriding plate mantle.
             > plate_thickness: self-explanatory, maximum expected thickness for the lithosphere in km
+            (3D only)
             > horizontal_plane: indicate the horizontal plane directions, by default 'xy'.
                                   Options: 'xy', 'yz', 'xz'
             > trench_direction: indicate the along trench direction, by default 'z'.
@@ -534,10 +534,10 @@ class SubductionModel(ModelProcessing):
             self.remove_slices()
 
             # Check if there's overriding plate material at this depth:
-            output_check = output_check.mat.to_numpy(dtype=int)
-            output_check = np.floor(output_check)
+            output_check = np.round(output_check.mat)
 
-            if dp_material not in output_check:
+            # if there are more op mantle than dp mantle nodes, this is reversed
+            if op_mantle in output_check:
                 self.output['polarity'] = np.ones(self.output.x.shape)
             else:
                 self.output['polarity'] = np.zeros(self.output.x.shape)
@@ -600,7 +600,7 @@ class SubductionModel(ModelProcessing):
                 self.set_slice(slice_direction, value=critical_depth, find_closest=True)
 
             # Create a database just for the next operations, saves on memory and code:
-            normal_index = self.output.mat[self.output.mat.round() == dp_material].index.to_numpy()
+            normal_index = self.output.mat[self.output.mat.round() == dp_mantle].index.to_numpy()
 
             # Detect along trench direction where it is reversed:
             trench_dir_normal = self.output[trench_direction].loc[normal_index].unique()
@@ -640,14 +640,16 @@ class SubductionModel(ModelProcessing):
             return critical_depth
 
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
     import matplotlib.pyplot as plt
+
     # for ts in np.arange(0, 3200, 200):
     #     # Preparar os dois loaders:
-    #     uw_model = SubductionModel(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
-    #                                scf=1e22, ts=ts)
-    #
-    #     D = uw_model.get_polarity(op_material=4, get_depth=True)
-    #     print('TS: {}\nPol: {}'.format(ts, uw_model.output.polarity.unique()))
-    #     # if 1 in uw_model.output.polarity.unique():
-    #     #     break
+
+    uw_model = SubductionModel(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
+                               scf=1e22, ts=800)
+    uw_model.get_polarity(dp_mantle=4, op_mantle=3)
+#     D = uw_model.get_polarity(op_material=4, get_depth=True)
+#     print('TS: {}\nPol: {}'.format(ts, uw_model.output.polarity.unique()))
+#     # if 1 in uw_model.output.polarity.unique():
+#     #     break
