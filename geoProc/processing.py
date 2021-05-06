@@ -479,9 +479,8 @@ class SubductionModel(ModelProcessing):
         # return trench_id
         # elif self.ndims == 3:
 
-    def get_polarity(self, op_material=4, plate_thickness=100., horizontal_plane='xz', trench_direction='z',
+    def get_polarity(self, dp_mantle=6, op_mantle=4, plate_thickness=100., horizontal_plane='xz', trench_direction='z',
                      get_depth=False):
-
 
         """
         Function for finding the overriding plate at a critical depth. This depth is 25% deeper than the maximum plate
@@ -489,8 +488,9 @@ class SubductionModel(ModelProcessing):
 
          Parameters:
             > uw_object: an object created with the uw_model script, loaded with timestep, mesh and material.
-            > op_material: the ID or range of IDS for the overriding plate crust.
+            > op_mantle: the ID or range of IDS for the overriding plate mantle.
             > plate_thickness: self-explanatory, maximum expected thickness for the lithosphere in km
+            (3D only)
             > horizontal_plane: indicate the horizontal plane directions, by default 'xy'.
                                   Options: 'xy', 'yz', 'xz'
             > trench_direction: indicate the along trench direction, by default 'z'.
@@ -534,9 +534,10 @@ class SubductionModel(ModelProcessing):
             self.remove_slices()
 
             # Check if there's overriding plate material at this depth:
-            output_check = output_check.mat.to_numpy(dtype=int)
+            output_check = np.round(output_check.mat)
 
-            if op_material in output_check:
+            # if there are more op mantle than dp mantle nodes, this is reversed
+            if op_mantle in output_check:
                 self.output['polarity'] = np.ones(self.output.x.shape)
             else:
                 self.output['polarity'] = np.zeros(self.output.x.shape)
@@ -576,10 +577,9 @@ class SubductionModel(ModelProcessing):
             valid_direction = ['x', 'y', 'z']
             check = np.sum([trench_direction == valid for valid in valid_direction])
             #
-            # # Get the vertical direction:
-            # directions_in_plane = [letter for letter in horizontal_plane]
-            # vertical_direction = [letter for letter in valid_direction if letter not in directions_in_plane] # Whatever
-            # # is not on the plane
+            # # Get the vertical direction: directions_in_plane = [letter for letter in horizontal_plane]
+            # vertical_direction = [letter for letter in valid_direction if letter not in directions_in_plane] #
+            # Whatever # is not on the plane
 
             if check == 0:
                 raise ValueError('Trench is invalid. Please try ''x'', ''y'' or ''z''.')
@@ -600,30 +600,30 @@ class SubductionModel(ModelProcessing):
                 self.set_slice(slice_direction, value=critical_depth, find_closest=True)
 
             # Create a database just for the next operations, saves on memory and code:
-            reversed_index = self.output.mat[self.output.mat.round() == op_material].index.to_numpy()
+            normal_index = self.output.mat[self.output.mat.round() == dp_mantle].index.to_numpy()
 
             # Detect along trench direction where it is reversed:
-            trench_dir_reverse = self.output[trench_direction].loc[reversed_index].unique()
+            trench_dir_normal = self.output[trench_direction].loc[normal_index].unique()
 
             # Remove any slices:
             self.remove_slices()
 
-            # Create a zeros array, each zero will represent the normal polarity
+            # Create a ones array, each one will represent the reversed polarity
             polarity = pd.DataFrame(data=np.array([self.output[trench_direction].to_numpy(),
-                                                   np.zeros(self.output.x.shape)]).T,
+                                                   np.ones(self.output.x.shape)]).T,
                                     columns=(trench_direction, 'state'))
 
             # Check all locations where trench direction reversed is found:
-            _, _, reversed_index = np.intersect1d(trench_dir_reverse,
-                                                  self.output[trench_direction].to_numpy(),
-                                                  return_indices=True)
+            _, _, normal_index = np.intersect1d(trench_dir_normal,
+                                                self.output[trench_direction].to_numpy(),
+                                                return_indices=True)
 
             # This only adds a zero to a single value of that trench_direction value:
-            polarity.loc[reversed_index, 'state'] = 1
+            polarity.loc[normal_index, 'state'] = 0
 
             # Copy those values for all trench_direction values:
-            for td in trench_dir_reverse:
-                polarity.state[polarity[trench_direction] == td] = 1
+            for td in trench_dir_normal:
+                polarity.state[polarity[trench_direction] == td] = 0
 
             # Add polarity to all dataframes now:
             self.output['polarity'] = polarity.state.copy()
@@ -642,12 +642,14 @@ class SubductionModel(ModelProcessing):
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    for ts in np.arange(0, 3200, 200):
-        # Preparar os dois loaders:
-        uw_model = SubductionModel(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
-                                   scf=1e22, ts=ts)
 
-        D = uw_model.get_polarity(op_material=5, get_depth=True)
-        print('TS: {}\nPol: {}\nDepth: {}'.format(ts, uw_model.output.polarity.unique(), D))
-        if 1 in uw_model.output.polarity.unique():
-            break
+    # for ts in np.arange(0, 3200, 200):
+    #     # Preparar os dois loaders:
+
+    uw_model = SubductionModel(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
+                               scf=1e22, ts=800)
+    uw_model.get_polarity(dp_mantle=4, op_mantle=3)
+#     D = uw_model.get_polarity(op_material=4, get_depth=True)
+#     print('TS: {}\nPol: {}'.format(ts, uw_model.output.polarity.unique()))
+#     # if 1 in uw_model.output.polarity.unique():
+#     #     break

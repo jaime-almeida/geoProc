@@ -171,7 +171,7 @@ class UwLoader:
         """
         Function to get all existing variables from the current working directory.
         """
-        print('Getting all variables...')
+        # print('Getting all variables...')
         self.get_material()
         self.get_velocity()
         self.get_strain()
