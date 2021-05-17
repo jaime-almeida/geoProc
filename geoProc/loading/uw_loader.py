@@ -339,6 +339,9 @@ class UwLoader:
                                   columns=['e_xx', 'e_yy', 'e_zz',
                                            'e_xy', 'e_xz', 'e_yz'])
 
+        # Rescale this variable, strain scales inversely to scf:
+        strain /= self.scf
+
         # Add the invariant
         if invariant:
             strain['e_II'] = invariant_info
@@ -755,11 +758,5 @@ class SubductionModel(UwLoader, ):
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
-    test = SubductionModel(model_dir=r'f:\NoPlateauSubduction\model_results\50OP_60DP', ts=0, scf=1e23)
-    test.get_strain()
-    x, y, mat = test.reinterpolate_window(variable=test.output.mat)
+    test = UwLoader(model_dir=r'f:\NoPlateauSubduction\model_results\50OP_60DP', ts=0, scf=1e23)
 
-    fig, ax = plt.subplots()
-
-    ax.pcolormesh(x, y, mat, cmap='RdYlBu_r')
-    ax.invert_yaxis()
