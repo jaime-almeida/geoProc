@@ -114,7 +114,7 @@ def get_nproc(mdir):
 # %%
 class UwLoader:
 
-    def __init__(self, model_dir, ts=0, scf=1e22):
+    def __init__(self, model_dir, ts=0, scf=1e22, get_time_only=False):
         if model_dir[-1] != '/':
             self.model_dir = model_dir + '/'
         else:
@@ -146,15 +146,16 @@ class UwLoader:
         self.current_step = ts_writer(ts)
         self.time_Ma = np.round(get_time(self.model_dir, self.current_step) * self.scf / (365 * 24 * 3600) / 1e6, 3)
 
-        # Initiate a output dataframe
-        self.output = None
+        if not get_time_only:
+            # Initiate a output dataframe
+            self.output = None
 
-        self._get_mesh()
+            self._get_mesh()
 
-        # if get_all:
-        self.get_all()
+            # if get_all:
+            self.get_all()
 
-        self.starting_output = self.output  # for slices
+            self.starting_output = self.output  # for slices
 
     def set_current_ts(self, step):
         """
