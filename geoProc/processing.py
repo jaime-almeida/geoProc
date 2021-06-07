@@ -105,11 +105,13 @@ class ModelProcessing:
 
         if self.loader == 'uw':
             temp = UwLoader(model_dir=model_dir, **kwargs)
+            if 'get_time_only' not in kwargs:
+                self._starting_output = temp.starting_output.copy()
+                self.output = temp.output
+
             self.current_step = temp.current_step
-            self.output = temp.output
             self.time_Ma = temp.time_Ma
             self.dim = temp.dim
-            self._starting_output = temp.starting_output.copy()
             self.scf = temp.scf
             self.model_name = temp.model_name
 
