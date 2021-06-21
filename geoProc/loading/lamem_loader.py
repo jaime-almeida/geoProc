@@ -72,7 +72,7 @@ def get_all_ts_folders(model_dir):
 # %%
 class LaMEMLoader:
 
-    def __init__(self, model_dir, ts=0, model_zone='internal', combined_id_names: list = None):
+    def __init__(self, model_dir, ts=0, model_zone='internal', load_vars=None, combined_id_names: list = None):
         """
         Loading function to generate the input for LaMEM model processing.
         Input arguments:
@@ -159,7 +159,15 @@ class LaMEMLoader:
             self._get_mesh()
 
             # Get the variables
-            self.get_all()
+            if not load_vars:
+                self.get_all()
+            else:
+                list_of_vars = ['velocity', 'phase', 'viscosity', 'pressure', 'temperature', 'strain_rate']
+
+                vars_to_load = set(list_of_vars).intersection(load_vars)
+
+                for vars in vars_to_load:
+                    eval('self._get_{}()'.format(vars))
 
             # Get the combined ids if needed:
             if combined_id_names:

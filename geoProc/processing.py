@@ -643,15 +643,9 @@ class SubductionModel(ModelProcessing):
 
 
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
 
     # for ts in np.arange(0, 3200, 200):
     #     # Preparar os dois loaders:
 
-    uw_model = SubductionModel(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
-                               scf=1e22, ts=800)
-    uw_model.get_polarity(dp_mantle=4, op_mantle=3)
-#     D = uw_model.get_polarity(op_material=4, get_depth=True)
-#     print('TS: {}\nPol: {}'.format(ts, uw_model.output.polarity.unique()))
-#     # if 1 in uw_model.output.polarity.unique():
-#     #     break
+    uw_model = ModelProcessing(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
+                               scf=1e22, ts=800, get_time_only=True)
