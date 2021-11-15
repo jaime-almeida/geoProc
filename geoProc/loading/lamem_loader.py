@@ -10,6 +10,7 @@ import re as re
 from sys import platform
 import numpy as np
 from vtk import vtkXMLPRectilinearGridReader
+from vtk import vtkXMLStructuredGridReader
 from vtk.util import numpy_support as v2n
 import os
 
@@ -72,7 +73,7 @@ def get_all_ts_folders(model_dir):
 # %%
 class LaMEMLoader:
 
-    def __init__(self, model_dir, ts=0, model_zone='internal', load_vars=None, combined_id_names: list = None):
+    def __init__(self, model_dir, ts=None, load_vars=None, combined_id_names: list = None):
         """
         Loading function to generate the input for LaMEM model processing.
         Input arguments:
@@ -88,33 +89,45 @@ class LaMEMLoader:
 
         # SAve the input variables:
         self.model_dir = model_dir
-        self.current_ts = ts
         self.dim = 3
         if combined_id_names:
             self.combination_list = combined_id_names
 
+        # TODO: TS AS INT IS NOT WORKING
+
         # Check how many timesteps to load
-        if ts:
+        if type(ts) == list:
+            load_list = True
+            load_single = False
+            print('Loading ts: {}'.format(ts))
+
+        # A single timestep is set
+        elif type(ts) == int or type(ts) == float:
+            load_list = False
             load_single = True
-        else:
+            print('Loading ts: {}'.format(ts))
+
+        # No timestep is set
+        elif ts is None:
+            load_list = False
             load_single = False
 
         # Get the timestep folder
         # folder_name, time = get_ts_folder(self.model_dir, ts)
         model_folders = get_all_ts_folders(self.model_dir)
 
+        # Store teh model folders:
+        self._model_folders = model_folders
+
         # Define the file extension:
-        if model_zone == 'internal':
-            vtk_ext = 'pvtr'
-        elif model_zone == 'surface':
-            vtk_ext = 'pvts'
-        else:
-            raise (TypeError, 'Non-existant LaMEM extension.')
+        vtk_ext = 'pvtr'
 
         # Prepare the dictionary with all outputs:
         self._complete_output = {}
+        self._complete_topography = {}
         self.time_stamps = {}
         self.time_Ma = None
+        self.current_ts = None
 
         for folder_name in model_folders:
             # Get current timestep:
@@ -123,8 +136,13 @@ class LaMEMLoader:
 
             if load_single:
                 self.current_ts = ts
+
                 # Make it so only the chosen timestep is loaded
                 if int(timestep) != ts:
+                    continue
+
+            elif load_list:
+                if int(timestep) not in ts:
                     continue
 
             print('Now reading timestep {} for model {}'.format(timestep, self.model_dir.split('\\')[-1]))
@@ -146,6 +164,7 @@ class LaMEMLoader:
             # print('Compiling data...')
             reader.Update()
 
+            # Get the data
             self._data = reader.GetOutput()
 
             # Initiate a boundary coordinate
@@ -162,7 +181,7 @@ class LaMEMLoader:
             if not load_vars:
                 self.get_all()
             else:
-                list_of_vars = ['velocity', 'phase', 'viscosity', 'pressure', 'temperature', 'strain_rate']
+                list_of_vars = ['velocity', 'phase', 'viscosity', 'pressure', 'temperature', 'strain_rate', 'stress']
 
                 vars_to_load = set(list_of_vars).intersection(load_vars)
 
@@ -173,11 +192,13 @@ class LaMEMLoader:
             if combined_id_names:
                 self._get_combined_id_values()
 
-            self.complete_output[timestep] = self.output.copy()
+            self._complete_output[timestep] = self.output.copy()
+
             self.time_stamps[timestep] = time
 
         # Set the current timestep to start the processing, if requested:
-        self.set_current_ts(step=str(self.current_ts).zfill(5))
+        if load_single:
+            self.set_current_ts(step=str(self.current_ts).zfill(5))
 
     def set_current_ts(self, step):
         """
@@ -186,7 +207,8 @@ class LaMEMLoader:
         """
         # Reinstanciate the object with a new timestep:
         step = str(step).zfill(5)
-        self.output = self.complete_output[step].copy()
+        self.output = self._complete_output[step].copy()
+
         self.current_ts = step
         self.time_Ma = self.time_stamps[step]
 
@@ -198,6 +220,7 @@ class LaMEMLoader:
         """
         Function to get all existing variables from the current working directory.
         """
+
         print('Getting all variables...')
         self._get_velocity()
         self._get_phase()
@@ -205,6 +228,8 @@ class LaMEMLoader:
         self._get_pressure()
         self._get_temperature()
         self._get_strain_rate()
+        self._get_stress()
+
 
     def _get_velocity(self):
         # Get the velocity from the data files:
@@ -274,13 +299,35 @@ class LaMEMLoader:
         # Order is: xx xy xz yx yy yz zx zy zz
         # Get the phase from the data files:
         strain_rate = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('strain_rate [1/s]'))
+        strain_rate_invariant = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('j2_strain_rate [1/s]'))
 
         # Save the phase dataframe as 'mat' to keep it working with uw scripts
         strain_rate = pd.DataFrame(data=strain_rate,
                                    columns=['e_xx', 'e_xy', 'e_xz', 'e_yx', 'e_yy', 'e_yz', 'e_zx', 'e_zy', 'e_zz'])
 
+        strain_rate_invariant = pd.DataFrame(data=strain_rate_invariant,
+                                             columns=['e_II'])
+
         # Merge with the current output dataframe
         self.output = self.output.merge(strain_rate, left_index=True, right_index=True)
+        self.output = self.output.merge(strain_rate_invariant, left_index=True, right_index=True)
+
+    def _get_stress(self):
+        # Order is: xx xy xz yx yy yz zx zy zz
+        # Get the phase from the data files:
+        strain_rate = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('dev_stress [MPa]'))
+        strain_rate_invariant = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('j2_dev_stress [MPa]'))
+
+        # Save the phase dataframe as 'mat' to keep it working with uw scripts
+        strain_rate = pd.DataFrame(data=strain_rate,
+                                   columns=['s_xx', 's_xy', 's_xz', 's_yx', 's_yy', 's_yz', 's_zx', 's_zy', 's_zz'])
+
+        strain_rate_invariant = pd.DataFrame(data=strain_rate_invariant,
+                                             columns=['s_II'])
+
+        # Merge with the current output dataframe
+        self.output = self.output.merge(strain_rate, left_index=True, right_index=True)
+        self.output = self.output.merge(strain_rate_invariant, left_index=True, right_index=True)
 
     def _get_temperature(self):
         # Get the phase from the data files:
@@ -298,13 +345,67 @@ class LaMEMLoader:
         return self._complete_output
 
     ##################################################
+    #                 GET THE TOPOGRAPHY             #
+    ##################################################
+    # TODO: Solve this topography issue
+    def get_topography(self):
+
+        # check in model folders which is the correct one:
+        correct_folder = [folder for folder in self._model_folders if str(self.current_ts) in folder][0]
+
+        # Get the vtk_name from the folder:
+        file_list = os.listdir('{}\\{}'.format(self.model_dir, correct_folder))
+        vtk_name = [file for file in file_list if 'pvts' in file][0]
+
+        # Create the filename to read
+        filename = '{}\\{}\\{}'.format(self.model_dir, correct_folder, vtk_name)
+
+        # Start the reader:
+        reader = vtkXMLStructuredGridReader()
+
+        # Get the information from it:
+        reader.SetFileName(filename)
+
+        # print('Compiling data...')
+        reader.Update()
+
+        # Get the data
+        topo_data = reader.GetOutput()
+
+        # =================== GET THE MESH DATA FOR THE SURFACE ===================
+
+        # Prepare to receive the mesh:
+        x = np.zeros(topo_data.GetNumberOfPoints())
+        y = np.zeros(topo_data.GetNumberOfPoints())
+        z = np.zeros(topo_data.GetNumberOfPoints())
+
+        # Build the mesh:
+        for i in range(topo_data.GetNumberOfPoints()):
+            x[i], y[i], z[i] = topo_data.GetPoint(i)
+
+        # Create the mesh:
+        mesh_info = np.column_stack([x, y, z])
+
+        # Build the 3D array in the output dataframe:
+        self.topography = self.topography = pd.DataFrame(data=mesh_info, columns=['x', 'y', 'z'], dtype='float')
+
+        # ======================== GET THE SURFACE DATA ===================
+        # Get the phase from the data files:
+        topography = v2n.vtk_to_numpy(self._topo_data.GetPointData().GetArray('topography [km]'))
+
+        # Save the phase dataframe as 'mat' to keep it working with uw scripts
+        topography = pd.DataFrame(data=topography, columns=['topography'])
+
+        # Merge with the current output dataframe
+        self.topography = self.topography.merge(topography, left_index=True, right_index=True)
+
+    ##################################################
     #              GET THE COMBINED NAMES            #
     ##################################################
 
     def _get_combined_id_values(self):
         # For each item on the list, get the value and append to the output frame:
         for combination_name in self.combination_list:
-
             data = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('{} [ ]'.format(combination_name)))
 
             # Save this in the list:
@@ -315,5 +416,7 @@ class LaMEMLoader:
 
 
 if __name__ == '__main__':
-    test = LaMEMLoader(model_dir='Z:\\PlateauCollision3D_LM\\model_results\\plateau_size\\_M_D70_O70', ts=400,
-                       combined_id_names=['_pacific', '_atlantic', '_caribbean_LIP', '_gaa'])
+    test = LaMEMLoader(model_dir='Z:\\SHAZAM\\models\\model_15',
+                       combined_id_names=['_africa', '_ghana', '_atlantic'])
+
+    test._get_velocity()

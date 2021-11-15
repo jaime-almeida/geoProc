@@ -116,7 +116,11 @@ class ModelProcessing:
             self.model_name = temp.model_name
 
         elif self.loader == 'lamem':
-            temp = LaMEMLoader(model_dir=model_dir, **kwargs)
+            try:
+                temp = LaMEMLoader(model_dir=model_dir, **kwargs)
+            except:
+                return
+
             self.output = temp.output
             # self.time_Ma = temp.time_Ma
             self.dim = temp.dim
@@ -126,6 +130,8 @@ class ModelProcessing:
             if temp.current_ts:
                 # if it came from a load_single stage
                 self.current_step = temp.current_ts
+            else:
+                self.current_step = 0
 
         # Get rid of this huge thing
         del temp
@@ -231,6 +237,9 @@ class ModelProcessing:
         for key in self.output:
             self.output[key] = self.output[key].iloc[index].reset_index(drop=True)
 
+        # Drop the nans
+        self.output.dropna()
+
     def remove_background(self, bg_phase=1):
         # Background is generally MI = min(MI)
         mi = self.output.mat.unique()
@@ -289,7 +298,7 @@ class ModelProcessing:
         # except:
         self.set_current_ts(self.current_step)
 
-    def set_slice(self, direction, value=0., n_slices=None, find_closest=True, save=False):
+    def set_slice(self, direction, value=0., n_slices=None, find_closest=True, save=False, diagonal=False):
         """
         Creates a slice according to the user specified parameters.
         """
@@ -643,15 +652,8 @@ class SubductionModel(ModelProcessing):
 
 
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-
     # for ts in np.arange(0, 3200, 200):
     #     # Preparar os dois loaders:
 
-    uw_model = SubductionModel(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
-                               scf=1e22, ts=800)
-    uw_model.get_polarity(dp_mantle=4, op_mantle=3)
-#     D = uw_model.get_polarity(op_material=4, get_depth=True)
-#     print('TS: {}\nPol: {}'.format(ts, uw_model.output.polarity.unique()))
-#     # if 1 in uw_model.output.polarity.unique():
-#     #     break
+    uw_model = ModelProcessing(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
+                               scf=1e22, ts=800, get_time_only=True)

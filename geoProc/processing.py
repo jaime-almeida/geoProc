@@ -105,6 +105,7 @@ class ModelProcessing:
 
         if self.loader == 'uw':
             temp = UwLoader(model_dir=model_dir, **kwargs)
+
             if 'get_time_only' not in kwargs:
                 self._starting_output = temp.starting_output.copy()
                 self.output = temp.output
@@ -116,7 +117,9 @@ class ModelProcessing:
             self.model_name = temp.model_name
 
         elif self.loader == 'lamem':
+
             temp = LaMEMLoader(model_dir=model_dir, **kwargs)
+
             self.output = temp.output
             # self.time_Ma = temp.time_Ma
             self.dim = temp.dim
@@ -126,6 +129,8 @@ class ModelProcessing:
             if temp.current_ts:
                 # if it came from a load_single stage
                 self.current_step = temp.current_ts
+            else:
+                self.current_step = 0
 
         # Get rid of this huge thing
         del temp
@@ -231,6 +236,9 @@ class ModelProcessing:
         for key in self.output:
             self.output[key] = self.output[key].iloc[index].reset_index(drop=True)
 
+        # Drop the nans
+        self.output.dropna()
+
     def remove_background(self, bg_phase=1):
         # Background is generally MI = min(MI)
         mi = self.output.mat.unique()
@@ -289,7 +297,7 @@ class ModelProcessing:
         # except:
         self.set_current_ts(self.current_step)
 
-    def set_slice(self, direction, value=0., n_slices=None, find_closest=True, save=False):
+    def set_slice(self, direction, value=0., n_slices=None, find_closest=True, save=False, diagonal=False):
         """
         Creates a slice according to the user specified parameters.
         """
@@ -643,9 +651,8 @@ class SubductionModel(ModelProcessing):
 
 
 if __name__ == '__main__':
-
     # for ts in np.arange(0, 3200, 200):
     #     # Preparar os dois loaders:
+    model_directory = r'Z:/SHAZAM/models/model_15'
 
-    uw_model = ModelProcessing(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
-                               scf=1e22, ts=800, get_time_only=True)
+    model = ModelProcessing(model_dir=model_directory, combined_id_names=['_africa', '_ghana', '_atlantic'], ts=[0, 1])
