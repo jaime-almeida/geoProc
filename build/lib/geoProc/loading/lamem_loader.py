@@ -69,11 +69,24 @@ def get_all_ts_folders(model_dir):
             needed_folders.append(line)
     return needed_folders
 
+unit_dict = {
+    "velocity":"cm/yr",
+    "density":"kg/m^3",
+    "stress":"MPa",
+    "strain_rate":"1/s",
+    "tot_disp":"km",
+    "creep":"Pa*s",
+    "yield":"MPa",
+    "diss":"W/m^3",
+    "visc_total":"Pa*s",
+    "pressure":"MPa"    
+}
+
 
 # %%
 class LaMEMLoader:
 
-    def __init__(self, model_dir, ts=None, load_vars=None, combined_id_names: list = None):
+    def __init__(self, model_dir, ts=None, load_vars=None, combined_id_names: list = None, verbose=True):
         """
         Loading function to generate the input for LaMEM model processing.
         Input arguments:
@@ -99,13 +112,15 @@ class LaMEMLoader:
         if type(ts) == list:
             load_list = True
             load_single = False
-            print('Loading ts: {}'.format(ts))
+            if verbose:
+                print('Loading ts: {}'.format(ts))
 
         # A single timestep is set
         elif type(ts) == int or type(ts) == float:
             load_list = False
             load_single = True
-            print('Loading ts: {}'.format(ts))
+            if verbose:
+                print('Loading ts: {}'.format(ts))
 
         # No timestep is set
         elif ts is None:
@@ -145,12 +160,15 @@ class LaMEMLoader:
                 if int(timestep) not in ts:
                     continue
 
-            print('Now reading timestep {} for model {}'.format(timestep, self.model_dir.split('\\')[-1]))
+            if verbose:
+                print('Now reading timestep {} for model {}'.format(timestep, self.model_dir.split('\\')[-1]))
 
             # Get the vtk_name from the folder:
-            file_list = os.listdir('{}\\{}'.format(model_dir, folder_name))
+            # Warning, this shit is spit-glued.
+            # For some ungodly reason it seemed to bug out in the prior iteration)
+            file_list = np.sort(os.listdir('{}\\{}'.format(model_dir, folder_name)))
             check_files = [vtk_ext in files for files in file_list]
-            vtk_name = file_list[check_files == 1]
+            vtk_name = file_list[check_files][0]
 
             # Create the filename to read
             filename = '{}\\{}\\{}'.format(model_dir, folder_name, vtk_name)
@@ -179,15 +197,29 @@ class LaMEMLoader:
 
             # Get the variables
             if not load_vars:
+                if verbose:
+                    print('Getting all variables...')
+
                 self.get_all()
             else:
-                list_of_vars = ['velocity', 'phase', 'viscosity', 'pressure', 'temperature', 'strain_rate', 'stress']
-
-                vars_to_load = set(list_of_vars).intersection(load_vars)
-
-                for vars in vars_to_load:
-                    eval('self._get_{}()'.format(vars))
-
+                coded_vars = ['velocity', 'strain_rate', 'stress', 'temperature']
+                
+                for var in load_vars:
+                    if var in coded_vars:
+                        eval('self._get_{}()'.format(var))
+                        
+                    else:
+                        
+                        # Check unit for this var:
+                        for key in unit_dict.keys():
+                            if key in var:
+                                # If you find the unit, break the loop
+                                unit = unit_dict[key]
+                                break
+                            else:
+                                unit = " "
+                        self._get_single_col_var("{} [{}]".format(var, unit), var.split("[")[0].strip())
+                        
             # Get the combined ids if needed:
             if combined_id_names:
                 self._get_combined_id_values()
@@ -221,16 +253,24 @@ class LaMEMLoader:
         Function to get all existing variables from the current working directory.
         """
 
-        print('Getting all variables...')
         self._get_velocity()
-        self._get_phase()
-        self._get_viscosity()
-        self._get_pressure()
         self._get_temperature()
         self._get_strain_rate()
         self._get_stress()
 
+    def _get_single_col_var(self, pv_name, column_name):
+        # Get the phase from the data files:
+        new_var = v2n.vtk_to_numpy(self._data.GetPointData().GetArray(pv_name))
 
+        # Save the phase dataframe as 'mat' to keep it working with uw scripts
+        new_var = pd.DataFrame(data=new_var, columns=[column_name])
+
+        # Merge with the current output dataframe
+        self.output = self.output.merge(new_var, left_index=True, right_index=True)
+        
+        pass
+    
+    
     def _get_velocity(self):
         # Get the velocity from the data files:
         velocity = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('velocity [cm/yr]'))
@@ -241,6 +281,8 @@ class LaMEMLoader:
         # Merge with the current output dataframe
         self.output = self.output.merge(velocity, left_index=True, right_index=True)
 
+    
+    
     def _get_mesh(self):
         # Prepare to receive the mesh:
         x = np.zeros(self._data.GetNumberOfPoints())
@@ -265,35 +307,6 @@ class LaMEMLoader:
         for axis, min_val, max_val in zip(axes, min_dim, max_dim):
             self.boundary[axis] = [min_val, max_val]
 
-    def _get_phase(self):
-        # Get the phase from the data files:
-        phase = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('phase [ ]'))
-
-        # Save the phase dataframe as 'mat' to keep it working with uw scripts
-        phase = pd.DataFrame(data=phase, columns=['mat'])
-
-        # Merge with the current output dataframe
-        self.output = self.output.merge(phase, left_index=True, right_index=True)
-
-    def _get_viscosity(self):
-        # Get the phase from the data files:
-        eta = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('visc_total [Pa*s]'))
-
-        # Save the phase dataframe as 'mat' to keep it working with uw scripts
-        eta = pd.DataFrame(data=eta, columns=['eta'])
-
-        # Merge with the current output dataframe
-        self.output = self.output.merge(eta, left_index=True, right_index=True)
-
-    def _get_pressure(self):
-        # Get the phase from the data files:
-        pressure = v2n.vtk_to_numpy(self._data.GetPointData().GetArray('pressure [MPa]'))
-
-        # Save the phase dataframe as 'mat' to keep it working with uw scripts
-        pressure = pd.DataFrame(data=pressure, columns=['pressure_MPa'])
-
-        # Merge with the current output dataframe
-        self.output = self.output.merge(pressure, left_index=True, right_index=True)
 
     def _get_strain_rate(self):
         # Order is: xx xy xz yx yy yz zx zy zz
@@ -416,7 +429,8 @@ class LaMEMLoader:
 
 
 if __name__ == '__main__':
-    test = LaMEMLoader(model_dir='Z:\\SHAZAM\\models\\model_15',
-                       combined_id_names=['_africa', '_ghana', '_atlantic'])
+    test = LaMEMLoader(model_dir=r'F:\GEMMA_REPO\make_videos\model_results\long_tfs_plateau',
+                       ts=[0],
+                       load_vars=['phase','velocity', 'strain_rate', 'visc_total', 'density', "rel_pl_rate"])
 
-    test._get_velocity()
+    

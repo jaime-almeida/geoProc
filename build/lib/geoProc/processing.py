@@ -3,10 +3,99 @@ import statsmodels.tsa.stattools
 from geoProc.loading.uw_loader import *
 from geoProc.loading.lamem_loader import LaMEMLoader
 
+# from breshenam_digit import bresenham_line
 import numpy as np
 import pandas as pd
 from scipy.signal import find_peaks
 
+def obtain_stress_regime(principal_stresses, stress_directions):
+    """
+    Return stress regime based on the principal components.
+    
+    Output: 
+    
+    Radial extensive   - RE
+    Pure extensional   - PE
+    Transtensive       - TT
+    Pure Strike-slip   - SS
+    Transpressive      - TP
+    Pure compression   - PC
+    Radial compression - RC 
+    """
+    # Expand the inputs
+    s1, s2, s3 = principal_stresses
+    s1_dir, s2_dir, _ = stress_directions
+    
+    # Calculate stress ratio R:
+    R = (s2-s3) / (s1-s3)
+    
+    # Return the regime based on a few rules:
+    if s1_dir == 'z':
+        # If we have vertical compression:
+        Rdash = R
+
+    elif s2_dir == 'z':
+        # If the vertical component is not relevant
+        Rdash = 2-R
+        
+    else:
+        # If we have vertical extension:
+        Rdash = 2+R
+    
+    # Based on the value of Rdash, return the stress regime
+    if Rdash < 0.25:
+        return "RE"
+    elif 0.25 <= Rdash < 0.75:
+        return "PE"
+    elif 0.75 <= Rdash < 1.25:
+        return "TT"
+    elif 1.25 <= Rdash < 1.75:
+        return "SS"
+    elif 1.75 <= Rdash < 2.25:
+        return "TP"
+    elif 2.25 <= Rdash < 2.75:
+        return "PC"
+    else:
+        return "RC"
+    
+
+def bresenham_line(x0, y0, x1, y1):
+    steep = abs(y1 - y0) > abs(x1 - x0)
+    if steep:
+        x0, y0 = y0, x0
+        x1, y1 = y1, x1
+
+    switched = False
+    if x0 > x1:
+        switched = True
+        x0, x1 = x1, x0
+        y0, y1 = y1, y0
+
+    if y0 < y1:
+        ystep = 1
+    else:
+        ystep = -1
+
+    deltax = x1 - x0
+    deltay = abs(y1 - y0)
+    error = -deltax / 2
+    y = y0
+
+    line = []
+    for x in range(x0, x1 + 1):
+        if steep:
+            line.append((y,x))
+        else:
+            line.append((x,y))
+
+        error = error + deltay
+        if error > 0:
+            y = y + ystep
+            error = error - deltax
+    if switched:
+        line.reverse()
+
+    return np.array(line)
 
 def get_closest(df, value):
     # Differences between them
@@ -105,6 +194,7 @@ class ModelProcessing:
 
         if self.loader == 'uw':
             temp = UwLoader(model_dir=model_dir, **kwargs)
+
             if 'get_time_only' not in kwargs:
                 self._starting_output = temp.starting_output.copy()
                 self.output = temp.output
@@ -116,20 +206,20 @@ class ModelProcessing:
             self.model_name = temp.model_name
 
         elif self.loader == 'lamem':
-            try:
-                temp = LaMEMLoader(model_dir=model_dir, **kwargs)
-            except:
-                return
+
+            temp = LaMEMLoader(model_dir=model_dir, **kwargs)
 
             self.output = temp.output
-            # self.time_Ma = temp.time_Ma
             self.dim = temp.dim
             self._complete_output = temp.complete_output.copy()
             self.time_stamps = temp.time_stamps
-
+            self._data = temp._data
+            
             if temp.current_ts:
                 # if it came from a load_single stage
                 self.current_step = temp.current_ts
+                self.time_Ma = temp.time_Ma
+
             else:
                 self.current_step = 0
 
@@ -298,14 +388,14 @@ class ModelProcessing:
         # except:
         self.set_current_ts(self.current_step)
 
-    def set_slice(self, direction, value=0., n_slices=None, find_closest=True, save=False, diagonal=False):
+    def set_slice(self, direction, value=0., n_slices=None, find_closest=True, save=False, diag_points=None):
         """
         Creates a slice according to the user specified parameters.
         """
 
         # This makes unlimited slices of the model. Use with care
-        if np.all(direction != 'x' and direction != 'y' and direction != 'z'):
-            raise Exception('The slice direction must be: ''x'', ''y'' or ''z''!')
+        if np.all(direction != 'x' and direction != 'y' and direction != 'z' and direction != 'diagonal'):
+            raise Exception('The slice direction must be: ''x'', ''y'', ''z'' or ''diagonal''!')
 
         # Save the original dataframe in a hidden variable:
         # self._starting_output = self.output.copy()
@@ -317,7 +407,33 @@ class ModelProcessing:
                                           'n_slices': n_slices,
                                           'find_closest': find_closest},
                                          )
+        if direction == "diagonal":
+            # Get the two points from the inputs
+            x1, y1, x2, y2 = diag_points
+            
+            # Using these coordinates, find the correct array locations:
+            model_coords = np.column_stack([self.output.x, self.output.y])
+            p1_ID = np.linalg.norm((x1, y1) - model_coords, axis=1).argmin()
+            p2_ID = np.linalg.norm((x2, y2) - model_coords, axis=1).argmin()
+            
+            # Calculate row and column for x,y
+            p1_x = np.argmin(np.abs(self.output.x.unique() - self.output.x.iloc[p1_ID]))
+            p1_y = np.argmin(np.abs(self.output.y.unique() - self.output.y.iloc[p1_ID]))
+            
+            p2_x = np.argmin(np.abs(self.output.x.unique() - self.output.x.iloc[p2_ID]))
+            p2_y = np.argmin(np.abs(self.output.y.unique() - self.output.y.iloc[p2_ID]))
 
+
+            
+            # Calculate the Breshenam line between those points:
+            line = bresenham_line(self.output.x.iloc[point_1_ID],
+                                  self.output.y.iloc[point_1_ID],
+                                  self.output.x.iloc[point_2_ID],
+                                  self.output.y.iloc[point_2_ID])
+            
+            
+            pass
+        
         if not n_slices:
 
             # If the rounder is disables
@@ -401,9 +517,91 @@ class ModelProcessing:
         self.output[vertical_direction] = np.abs(
             self.output[vertical_direction] - self.output[vertical_direction].max())
 
-    #################################################
-    #             SUBDUCTION FUNCTIONS              #
-    #################################################
+
+    def calculate_deformation_regime(self):
+        """
+        Calculate the deformation regime for every point in the model, as described in Delvaux et al. (1997).
+        
+        Parameters:
+            > None
+        
+        Output:
+            > Two new columns in the output object:
+                - regime
+                - number_regime
+                
+            The correspondence is:
+                "RE":0  - Radial extension
+                "PE":1  - Pure extension
+                "TT":2  - Transtension
+                "SS":3  - Strike-slip
+                "TP":4  - Transpression
+                "PC":5  - Pure compression
+                "RC":6  - Radial compression
+
+        """
+        directions = ['x', 'y', 'z']
+        modelled_regime = []
+        S1, S2, S3, S1_dir, S2_dir, S3_dir	 = [], [], [], [], [], []
+        
+        for row in self.output.iterrows():
+            # The polynomial package requires the following structure:
+            # Array: [P1, P2, P3, P4] where P1-4 are the different terms for each degrees of the eq. in increasing order, such as P1 + P2*x + P3*x^2 + P4*x^3
+            
+            stress_matrix = np.matrix([[row.s_xx, row.s_xy, row.s_xz],
+                                        [row.s_yx, row.s_yy, row.s_yz],
+                                        [row.s_zx, row.s_zy, row.s_zz]])
+            
+            # The equation is: -L^3 + J1*L^2 - J2*L + J3 = 0 (Cauchy tensor for dev stress!)
+            P4 = -1
+            
+            # First dev. stress invariant (s1 + s2 + s3):
+            I1 = P3 = row.s_xx + row.s_yy + row.s_zz # Should be zero, we're in a deviatoric system.
+            
+            # Second strain invariant:
+            I2 = P2 = 0.5 * ((np.linalg.trace(stress_matrix)**2) - np.linalg.trace(stress_matrix**2)) # NON-DEVIATORIC
+            
+            # Third invariant:0
+            I3 = P1 = np.linalg.det(stress_matrix) #row.s_xx*row.s_yy*row.s_zz + 2*row.s_xy*row.s_yz*row.s_zx - row.s_zz*row.s_xy**2 - row.s_xx*row.s_yz**2 - row.s_yy*row.s_zx**2 
+            
+            # Calculate the characteristic equation and get its roots to obtain the principal stresses
+            charac_eq = np.polynomial.Polynomial([P1, -P2, P3, P4])
+            lambdas = charac_eq.roots()
+            
+            # Obtain the values of these components, from Cauchy tensor
+            s1 = np.max(lambdas)
+            s3 = np.min(lambdas)
+            s2 = I1 - s1 - s3 # Technically I don't need S2 but we calculate anyway
+            
+            # In theory  as each lambda has a non-trivial unique solution for (s_{ij} * \lambda\delta_{ij})*n_{j} = 0, in which n_{j} is the orientation of the eigenvector.
+            # however, under these conditions, they all have the same solution. 
+            L_mat = lambdas * np.eye(3,3)   # right side 
+            stress_vecs = np.round(np.linalg.eig(stress_matrix-L_mat)[1], 0) # We can ignore the decimal spaces, we just want the directions
+            
+            # Decompose into the individual vectors:
+            s1_vec, s2_vec, s3_vec = stress_vecs.T
+            s1_dir = "{}".format(directions[np.argmax(np.abs(s1_vec).A1)])
+            s2_dir = "{}".format(directions[np.argmax(np.abs(s2_vec).A1)])
+            s3_dir = "{}".format(directions[np.argmax(np.abs(s3_vec).A1)])
+            
+            # Use the Delvaux method to obtain the regime:
+            regime = obtain_stress_regime([s1, s2, s3], [s1_dir, s2_dir, s3_dir])
+
+            # append the results:
+            modelled_regime.append(regime)
+        
+        # Store the results in the output database
+        self.output["number_regime"] = np.nan
+
+        number_dict = {"RE":0, "PE":1, "TT":2, "SS":3, "TP":4, "PC":5, "RC":6}
+
+        for type_of_deformation in self.output.regime.unique():
+            
+            self.output.loc[self.output.regime==type_of_deformation, "number_regime"] = number_dict[type_of_deformation]    
+
+#################################################
+#             SUBDUCTION FUNCTIONS              #
+#################################################
 
 
 class SubductionModel(ModelProcessing):
@@ -654,6 +852,6 @@ class SubductionModel(ModelProcessing):
 if __name__ == '__main__':
     # for ts in np.arange(0, 3200, 200):
     #     # Preparar os dois loaders:
+    model_directory = r'Z:/SHAZAM/models/model_15'
 
-    uw_model = ModelProcessing(model_dir='Z:\\AgeTest\\ResolutionTests\\grid_test\\30OP_90DP\\',
-                               scf=1e22, ts=800, get_time_only=True)
+    model = ModelProcessing(model_dir=model_directory, combined_id_names=['_africa', '_ghana', '_atlantic'], ts=[0, 1])
